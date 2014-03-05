@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Fidget</title>
+	<!--<link rel="stylesheet" href="">-->
+	<style type="text/css">
+	@import url(http://fonts.googleapis.com/css?family=Ubuntu:300,400,700);
+	body, textarea, input {
+		font-family: "Ubuntu" sans-serif;
+		font-weight: lighter;
+		font-size: 24px;
+		color: #999;
+		line-height: 34px;
+	}
+	div.col {
+		background-color: #8eaeca;
+		border: 1px solid #ccc;
+		float: left;
+		height: 500px;
+		padding: 8px;
+		position: relative;
+	}
+	@media (min-width: 1000px) {
+		div.col {
+			width: 48%;
+		}
+	}
+	@media (min-width: 650px) {
+		div.col {
+			width: 36%;
+		}		
+	}
+	textarea {
+		border: none;
+		margin: 8px;
+		width: 95%;
+		height: 85%;
+	}
+	#result {
+		color: #333;
+		padding: 15px 15px;
+		font-weight: normal;
+	}
+	#result span {
+		display: block;
+	}
+	#sum {
+		position: absolute;
+		bottom: 4px;
+		color: #666;
+		margin-top: 1em;
+		padding-left: 15px;
+	}
+	#sum:before {
+		content: "Sum: ";
+	}
+	#sum {
+		opacity: 0;
+		transition: opacity 0.25s;
+	}
+	input {display: none;}
+	</style>
+	</head>
+<body>
+	<div class="col">
+		<textarea id="calc"></textarea>
+		<input type="color" id="colorpicker" value="" placeholder="">
+	</div>
+	<div class="col">
+		<div id="result">
+		</div>
+		<div id="sum">{{calc.total}}</div>
+	</div>
+	<script type="text/javascript">
+		function map(func) {
+			var result = []
+			for (var ndx in this) {
+				result.push(func(this[ndx]))
+			}
+			return result
+		}
+
+		function calcLines(str) {
+			var lines = (str == "" && [] || str.split('\n'))
+			var total = 0
+
+			var result = lines.map(function (el) {
+				try {
+					var ans = eval(el)
+					if (typeof(ans) == "number") {
+						total += ans
+						return ans
+					}
+					else if (typeof(ans) == "string") {
+						return ans
+					}
+					return ""
+				}
+				catch (err) {
+					return "#err"
+				}
+			})
+			return {'result': result, 'total': total}
+		}
+		
+		var result = document.getElementById('result')
+		var sum = document.getElementById('sum')
+		function updateResult(calc) {
+			result.innerHTML = calc.result.map(function (el) {return "<span>" + (el || "&nbsp;") + "</span>";} ).join("")
+
+			sum.innerHTML = calc.total
+			window.setTimeout(
+			 function () {sum.style.opacity = ((calc.total != 0 || calc.result.length) && 1 || 0)}, 0.01)
+		}
+		if (localStorage.getItem("result")) {
+			// console.log(localStorage.getItem("result"))
+			updateResult(JSON.parse(localStorage.getItem("result")))
+		}
+
+		var picker = document.getElementById('colorpicker')
+		picker.addEventListener('change', function (e) {
+			result.innerHTML = this.value
+			var els = document.getElementsByTagName('div')
+			
+			for (var ndx in els) {
+				els[ndx].style.backgroundColor = this.value
+			}
+		})
+
+		var entry = document.getElementsByTagName('textarea')[0]
+		if (localStorage.getItem("entry")) {
+			entry.value = localStorage.getItem("entry")
+		}
+
+		entry.focus()
+		entry.addEventListener('keyup', function (e) {
+			localStorage.setItem("entry", this.value)
+			var calc = calcLines(this.value)
+			localStorage.setItem("result", JSON.stringify(calc))
+
+			updateResult(calc)
+			highlightCurrentLine()
+		})
+
+		function highlightCurrentLine() {
+			// TODO: implement
+		}
+
+		function clear() {
+			localStorage.setItem('input', '')
+			localStorage.setItem('result', '')
+			updateResult({'result': [], 'total': 0.0})
+		}
+	</script>
+</body>
+</html>
