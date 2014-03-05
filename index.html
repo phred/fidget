@@ -9,10 +9,11 @@
 	@import url(http://fonts.googleapis.com/css?family=Ubuntu:300,400,700);
 	body, textarea, input {
 		font-family: "Ubuntu" sans-serif;
-		font-weight: lighter;
+		font-weight: 300;
 		font-size: 24px;
 		color: #999;
 		line-height: 34px;
+		margin: 0px;
 	}
 	div.col {
 		background-color: #8eaeca;
@@ -44,13 +45,21 @@
 		font-weight: normal;
 	}
 	#result span {
+		background-color: transparent;
 		display: block;
+		transition: background-color 0.25s;
+	}
+	#result span:hover {
+		background-color: #b5dbf7;
+		transition: background-color 0.25s;
+	}
+	hr {
+		margin-top: 3em;
 	}
 	#sum {
-		position: absolute;
+		/*position: absolute;*/
 		bottom: 4px;
 		color: #666;
-		margin-top: 1em;
 		padding-left: 15px;
 	}
 	#sum:before {
@@ -59,6 +68,18 @@
 	#sum {
 		opacity: 0;
 		transition: opacity 0.25s;
+	}
+	#cells {
+		margin-top: 3em;
+		font-size: 16px;
+	}
+	#cells span {
+		padding: 0px 12px;
+		margin: 4px;
+		background: #114;
+		color: #8eaeca;
+		border-radius: 24px;
+		display: inline-block;
 	}
 	input {display: none;}
 	</style>
@@ -71,52 +92,132 @@
 	<div class="col">
 		<div id="result">
 		</div>
+		<hr/>
 		<div id="sum">{{calc.total}}</div>
+		<div id="cells"></div>
 	</div>
 	<script type="text/javascript">
 		function map(func) {
 			var result = []
 			for (var ndx in this) {
-				result.push(func(this[ndx]))
+				result.push(func(this[ndx], ndx))
 			}
 			return result
 		}
 
+		function Parser(line) {
+			return {
+				ndx: 0,
+				tokens: line.split(" "),
+				curToken: function () { return this.tokens[this.ndx] },
+				nextToken: function () { return this.tokens[this.ndx++] },
+				hasTokens: function () { return this.ndx < this.tokens.length }
+			}
+		}
+		function parseAndEval(line, state) {
+			var parser = new Parser(line)
+			var tokens = []
+
+			while (parser.hasTokens()) {
+				var tok = parser.nextToken()
+				if (tok.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
+					tokens.push(parseFloat(tok))
+				}
+				else if (state.immediate[tok]) {
+					state.immediate[tok].call(null, parser, state)
+				}
+				else if (state[tok]) {
+					tokens.push(state[tok])
+				}
+			}
+
+			var stk = []
+			while (tokens.length > 0) {
+				var tok = tokens.shift(0)
+				if (typeof(tok) === "number") {
+					stk.push(tok)
+				}
+				else if (typeof(tok) === "function") {
+					stk = tok.call(null, stk)
+				}
+			}
+			return stk
+		}
+
+		function initState() {
+			var binary = function (op) {
+				return function (stk) {
+					return [op(stk[0], stk[1])].concat(stk.slice(2))
+				}
+			}
+			return {
+				"+": binary(function (a,b) {return a+b}),
+				"-": binary(function (a,b) {return a-b}),
+				"*": binary(function (a,b) {return a*b}),
+				"/": binary(function (a,b) {return a/b}),
+				"immediate": {
+					"let": function (parser, state) {
+						var varName = parser.nextToken()
+						var cell = 0.0
+
+						state[varName] = function (stk) { return [cell].concat(stk) }
+						state['#' + varName] = function (stk) { cell += stk[0]; return stk }
+						state.cells.__defineGetter__(varName, function () { return cell })
+						return varName
+					},
+					"let$": function (parser, state) {
+						while (parser.hasTokens()) {
+							var name = state.immediate.let(parser, state)
+
+							var cls = function (varName) {
+								var goal = parser.nextToken()
+
+								var getter = state.cells.__lookupGetter__(varName)
+								state.cells.__defineGetter__(varName, function () { return {'val': getter(), 'goal': goal, 'toString': function () { return this.val + '/' + this.goal } } })
+							}
+							cls(name)
+						}
+					},
+
+				},
+				cells: {}
+			}
+		}
 		function calcLines(str) {
 			var lines = (str == "" && [] || str.split('\n'))
 			var total = 0
+			var state = initState()
 
-			var result = lines.map(function (el) {
+			var result = lines.map(function (line) {
 				try {
-					var ans = eval(el)
-					if (typeof(ans) == "number") {
-						total += ans
-						return ans
+					var result = parseAndEval(line, state)
+					if (result.length == 1) {
+						var ans = result[0]
+						if (typeof(ans) == "number") {
+							total += ans
+							return ans
+						}
 					}
-					else if (typeof(ans) == "string") {
-						return ans
-					}
-					return ""
+					return JSON.stringify(result)
 				}
 				catch (err) {
+					console.log(err.stack)
 					return "#err"
 				}
 			})
-			return {'result': result, 'total': total}
+			return {'result': result, 'total': total, 'cells': state.cells}
 		}
 		
 		var result = document.getElementById('result')
 		var sum = document.getElementById('sum')
+		var cells = document.getElementById('cells')
 		function updateResult(calc) {
-			result.innerHTML = calc.result.map(function (el) {return "<span>" + (el || "&nbsp;") + "</span>";} ).join("")
+			result.innerHTML = calc.result.map(function (el) {return "<span>" + (el === "" && "&nbsp;" || el) + "</span>";} ).join("")
+			cells.innerHTML = map.call((calc.cells || {}), function (el, ndx) {return "<span>" + ndx + ":&nbsp;" + (el === "" && "&nbsp;" || (el.goal - el.val)) + "</span>";} ).join("")
 
 			sum.innerHTML = calc.total
 			window.setTimeout(
 			 function () {sum.style.opacity = ((calc.total != 0 || calc.result.length) && 1 || 0)}, 0.01)
-		}
-		if (localStorage.getItem("result")) {
-			// console.log(localStorage.getItem("result"))
-			updateResult(JSON.parse(localStorage.getItem("result")))
 		}
 
 		var picker = document.getElementById('colorpicker')
@@ -132,6 +233,7 @@
 		var entry = document.getElementsByTagName('textarea')[0]
 		if (localStorage.getItem("entry")) {
 			entry.value = localStorage.getItem("entry")
+			updateResult(calcLines(entry.value))
 		}
 
 		entry.focus()
