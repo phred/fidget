@@ -19,7 +19,7 @@
 		background-color: #8eaeca;
 		border: 1px solid #ccc;
 		float: left;
-		height: 500px;
+		/*height: 500px;*/
 		padding: 8px;
 		position: relative;
 	}
@@ -37,7 +37,7 @@
 		border: none;
 		margin: 8px;
 		width: 95%;
-		height: 85%;
+		height: 500px;
 	}
 	#result {
 		color: #333;
@@ -114,34 +114,41 @@
 				hasTokens: function () { return this.ndx < this.tokens.length }
 			}
 		}
+
+		function evaluate(tokens, stk) {
+			console.log(tokens)
+			console.log(stk)
+			tokens.map(function (tok) {
+				if (typeof(tok) === "number") {
+					stk = [tok].concat(stk)
+				}
+				else if (typeof(tok) === "function") {
+					stk = tok.call(null, stk)
+				}
+			})
+			return stk
+		}
+
+		function parseWord(word, parser, tokens, state) {
+			if (word.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
+				tokens.push(parseFloat(word))
+			}
+			else if (state.immediate[word]) {
+				state.immediate[word].call(null, parser, state)
+			}
+			else if (state[word]) {
+				tokens.push(state[word])
+			}
+		}
 		function parseAndEval(line, state) {
 			var parser = new Parser(line)
 			var tokens = []
 
 			while (parser.hasTokens()) {
-				var tok = parser.nextToken()
-				if (tok.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
-					tokens.push(parseFloat(tok))
-				}
-				else if (state.immediate[tok]) {
-					state.immediate[tok].call(null, parser, state)
-				}
-				else if (state[tok]) {
-					tokens.push(state[tok])
-				}
+				parseWord(parser.nextToken(), parser, tokens, state)
 			}
 
-			var stk = []
-			while (tokens.length > 0) {
-				var tok = tokens.shift(0)
-				if (typeof(tok) === "number") {
-					stk.push(tok)
-				}
-				else if (typeof(tok) === "function") {
-					stk = tok.call(null, stk)
-				}
-			}
-			return stk
+			return evaluate(tokens, [])
 		}
 
 		function initState() {
@@ -161,7 +168,7 @@
 						var cell = 0.0
 
 						state[varName] = function (stk) { return [cell].concat(stk) }
-						state['#' + varName] = function (stk) { cell += stk[0]; return stk }
+						state['#' + varName] = function (stk) { cell += stk[0]; return stk.slice(1) }
 						state.cells.__defineGetter__(varName, function () { return cell })
 						return varName
 					},
@@ -177,6 +184,19 @@
 							}
 							cls(name)
 						}
+					},
+					":": function (parser, state) {
+						var name = parser.nextToken()
+						var tokens = []
+						var limitedState = new Object(state)
+						limitedState.immediate = {}
+
+						while (parser.hasTokens() && parser.curToken() !== ';') {
+							var tok = parser.nextToken()
+							parseWord(tok, parser, tokens, limitedState)
+						}
+
+						state[name] = function (stk) { return evaluate(tokens, stk) }
 					},
 
 				},
@@ -213,7 +233,7 @@
 		var cells = document.getElementById('cells')
 		function updateResult(calc) {
 			result.innerHTML = calc.result.map(function (el) {return "<span>" + (el === "" && "&nbsp;" || el) + "</span>";} ).join("")
-			cells.innerHTML = map.call((calc.cells || {}), function (el, ndx) {return "<span>" + ndx + ":&nbsp;" + (el === "" && "&nbsp;" || (el.goal - el.val)) + "</span>";} ).join("")
+			cells.innerHTML = map.call((calc.cells || {}), function (el, ndx) {return "<span>" + ndx + ":&nbsp;" + (el === "" && "&nbsp;" || ((el.goal && el.goal - el.val || el))) + "</span>";} ).join("")
 
 			sum.innerHTML = calc.total
 			window.setTimeout(
