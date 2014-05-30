@@ -4,277 +4,115 @@
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<title>Fidget</title>
-	<!--<link rel="stylesheet" href="">-->
-	<style type="text/css">
-	@import url(http://fonts.googleapis.com/css?family=Ubuntu:300,400,700);
-	body, textarea, input {
-		font-family: "Ubuntu" sans-serif;
-		font-weight: 300;
-		font-size: 24px;
-		color: #999;
-		line-height: 34px;
-		margin: 0px;
-	}
-	div.col {
-		background-color: #8eaeca;
-		border: 1px solid #ccc;
-		float: left;
-		/*height: 500px;*/
-		padding: 8px;
-		position: relative;
-	}
-	@media (min-width: 1000px) {
-		div.col {
-			width: 48%;
-		}
-	}
-	@media (min-width: 650px) {
-		div.col {
-			width: 36%;
-		}		
-	}
-	textarea {
-		border: none;
-		margin: 8px;
-		width: 95%;
-		height: 500px;
-	}
-	#result {
-		color: #333;
-		padding: 15px 15px;
-		font-weight: normal;
-	}
-	#result span {
-		background-color: transparent;
-		display: block;
-		transition: background-color 0.25s;
-	}
-	#result span:hover {
-		background-color: #b5dbf7;
-		transition: background-color 0.25s;
-	}
-	hr {
-		margin-top: 3em;
-	}
-	#sum {
-		/*position: absolute;*/
-		bottom: 4px;
-		color: #666;
-		padding-left: 15px;
-	}
-	#sum:before {
-		content: "Sum: ";
-	}
-	#sum {
-		opacity: 0;
-		transition: opacity 0.25s;
-	}
-	#cells {
-		margin-top: 3em;
-		font-size: 16px;
-	}
-	#cells span {
-		padding: 0px 12px;
-		margin: 4px;
-		background: #114;
-		color: #8eaeca;
-		border-radius: 24px;
-		display: inline-block;
-	}
-	input {display: none;}
-	</style>
-	</head>
+	<link rel="stylesheet" href="app.css" media="screen" charset="utf-8">
+	<script src="react-0.10.0/build/JSXTransformer.js"></script>
+	<script src="react-0.10.0/build/react.js"></script>
+</head>
 <body>
-	<div class="col">
-		<textarea id="calc"></textarea>
-		<input type="color" id="colorpicker" value="" placeholder="">
+	<div id="app">
 	</div>
-	<div class="col">
-		<div id="result">
-		</div>
-		<hr/>
-		<div id="sum">{{calc.total}}</div>
-		<div id="cells"></div>
-	</div>
-	<script type="text/javascript">
-		function map(func) {
-			var result = []
-			for (var ndx in this) {
-				result.push(func(this[ndx], ndx))
-			}
-			return result
+  <script type="text/javascript" src="app.js"></script>
+	<script type="text/jsx">
+    /** @jsx React.DOM */
+
+		var getCurrentLine = function (node) {
+			var lineNumber = 0;
+
+			lineNum = node.value.substr(0,node.selectionStart).split("\n").length - 1;
+			content = node.value.split("\n")[lineNumber];
+
+			return 1 + lineNum;
 		}
 
-		function Parser(line) {
-			return {
-				ndx: 0,
-				tokens: line.split(" "),
-				curToken: function () { return this.tokens[this.ndx] },
-				nextToken: function () { return this.tokens[this.ndx++] },
-				hasTokens: function () { return this.ndx < this.tokens.length }
+		var ProgramInput = React.createClass({
+			notifyLineChange: function () {
+				var textbox = this.refs.textbox.getDOMNode();
+				this.props.onLineChange(getCurrentLine(textbox));
+			},
+			handleChange: function () {
+				var textbox = this.refs.textbox.getDOMNode();
+				this.props.onUserInput(textbox.value);
+				this.notifyLineChange();
+			},
+			updateLine: function () {
+				this.notifyLineChange();
+			},
+			render: function () {
+				var ndx = 0;
+				return (
+					<textarea className="programInput" ref="textbox" onChange={this.handleChange} onKeyUp={this.updateLine} onClick={this.updateLine} value={this.props.input} />
+				);
 			}
-		}
+		});
+		var OutputLines = React.createClass({
+			render: function () {
+				var highlight = this.props.highlight;
+				var rows = [], ndx = 0, nbsp = "\u000f";
+				return <div id="result">{this.props.text.map(function (el) {
+					return <span key={ndx++} className={ndx == highlight ? "hl" : null}>{el || nbsp}</span>;
+				})}</div>;
+			}
+		});
+		var Sum = React.createClass({
+			render: function () {
+				return <div className="sum">Sum: {this.props.value}</div>;
+			}
+		});
+		var Cells = React.createClass({
+			render: function () {
+				var cells = this.props.cells;
+				return <div className="cells">{
+					Object.keys(cells).map(function (key) {
+						return <span key={key} className="cell">{key}: {cells[key]}</span>;
+					})
+				}</div>;
+			}
+		});
 
-		function evaluate(tokens, stk) {
-			console.log(tokens)
-			console.log(stk)
-			tokens.map(function (tok) {
-				if (typeof(tok) === "number") {
-					stk = [tok].concat(stk)
+		var App = React.createClass({
+			getInitialState: function () {
+				var program = localStorage.getItem("entry");
+				var calc = calcLines(program);
+				return {
+					programInput: program,
+					outputLines: calc.result,
+					cells: calc.cells,
+					sum: calc.total,
+					lineNum: localStorage.getItem("currentLine") || 1,
+					bufname: "untitled",
 				}
-				else if (typeof(tok) === "function") {
-					stk = tok.call(null, stk)
-				}
-			})
-			return stk
-		}
+			},
+			interpretAndRun: function (program) {
+				var calc = calcLines(program);
+				localStorage.setItem("entry", program);
+				localStorage.setItem("result", JSON.stringify(calc));
 
-		function parseWord(word, parser, tokens, state) {
-			if (word.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
-				tokens.push(parseFloat(word))
+				this.setState({programInput: program,
+					outputLines: calc.result,
+				  cells: calc.cells,
+					sum: calc.total,
+				});
+			},
+			updateLine: function (lineNum) {
+				this.setState({lineNum: lineNum});
+				localStorage.setItem("currentLine", lineNum);
+			},
+			render: function () {
+				return (<div className="program">
+					<div className="col">
+						<h2>{this.state.bufname}</h2>
+						<ProgramInput input={this.state.programInput} onUserInput={this.interpretAndRun} onLineChange={this.updateLine} />
+					</div>
+					<div className="col">
+						<OutputLines text={this.state.outputLines} highlight={this.state.lineNum}/>
+						<Sum value={this.state.sum}/>
+						<Cells cells={this.state.cells}/>
+						<span>{this.state.lineNum}</span>
+					</div>
+				</div>);
 			}
-			else if (state.immediate[word]) {
-				state.immediate[word].call(null, parser, state)
-			}
-			else if (state[word]) {
-				tokens.push(state[word])
-			}
-		}
-		function parseAndEval(line, state) {
-			var parser = new Parser(line)
-			var tokens = []
-
-			while (parser.hasTokens()) {
-				parseWord(parser.nextToken(), parser, tokens, state)
-			}
-
-			return evaluate(tokens, [])
-		}
-
-		function initState() {
-			var binary = function (op) {
-				return function (stk) {
-					return [op(stk[0], stk[1])].concat(stk.slice(2))
-				}
-			}
-			return {
-				"+": binary(function (a,b) {return a+b}),
-				"-": binary(function (a,b) {return a-b}),
-				"*": binary(function (a,b) {return a*b}),
-				"/": binary(function (a,b) {return a/b}),
-				"immediate": {
-					"let": function (parser, state) {
-						var varName = parser.nextToken()
-						var cell = 0.0
-
-						state[varName] = function (stk) { return [cell].concat(stk) }
-						state['#' + varName] = function (stk) { cell += stk[0]; return stk.slice(1) }
-						state.cells.__defineGetter__(varName, function () { return cell })
-						return varName
-					},
-					"let$": function (parser, state) {
-						while (parser.hasTokens()) {
-							var name = state.immediate.let(parser, state)
-
-							var cls = function (varName) {
-								var goal = parser.nextToken()
-
-								var getter = state.cells.__lookupGetter__(varName)
-								state.cells.__defineGetter__(varName, function () { return {'val': getter(), 'goal': goal, 'toString': function () { return this.val + '/' + this.goal } } })
-							}
-							cls(name)
-						}
-					},
-					":": function (parser, state) {
-						var name = parser.nextToken()
-						var tokens = []
-						var limitedState = new Object(state)
-						limitedState.immediate = {}
-
-						while (parser.hasTokens() && parser.curToken() !== ';') {
-							var tok = parser.nextToken()
-							parseWord(tok, parser, tokens, limitedState)
-						}
-
-						state[name] = function (stk) { return evaluate(tokens, stk) }
-					},
-
-				},
-				cells: {}
-			}
-		}
-		function calcLines(str) {
-			var lines = (str == "" && [] || str.split('\n'))
-			var total = 0
-			var state = initState()
-
-			var result = lines.map(function (line) {
-				try {
-					var result = parseAndEval(line, state)
-					if (result.length == 1) {
-						var ans = result[0]
-						if (typeof(ans) == "number") {
-							total += ans
-							return ans
-						}
-					}
-					return JSON.stringify(result)
-				}
-				catch (err) {
-					console.log(err.stack)
-					return "#err"
-				}
-			})
-			return {'result': result, 'total': total, 'cells': state.cells}
-		}
-		
-		var result = document.getElementById('result')
-		var sum = document.getElementById('sum')
-		var cells = document.getElementById('cells')
-		function updateResult(calc) {
-			result.innerHTML = calc.result.map(function (el) {return "<span>" + (el === "" && "&nbsp;" || el) + "</span>";} ).join("")
-			cells.innerHTML = map.call((calc.cells || {}), function (el, ndx) {return "<span>" + ndx + ":&nbsp;" + (el === "" && "&nbsp;" || ((el.goal && el.goal - el.val || el))) + "</span>";} ).join("")
-
-			sum.innerHTML = calc.total
-			window.setTimeout(
-			 function () {sum.style.opacity = ((calc.total != 0 || calc.result.length) && 1 || 0)}, 0.01)
-		}
-
-		var picker = document.getElementById('colorpicker')
-		picker.addEventListener('change', function (e) {
-			result.innerHTML = this.value
-			var els = document.getElementsByTagName('div')
-			
-			for (var ndx in els) {
-				els[ndx].style.backgroundColor = this.value
-			}
-		})
-
-		var entry = document.getElementsByTagName('textarea')[0]
-		if (localStorage.getItem("entry")) {
-			entry.value = localStorage.getItem("entry")
-			updateResult(calcLines(entry.value))
-		}
-
-		entry.focus()
-		entry.addEventListener('keyup', function (e) {
-			localStorage.setItem("entry", this.value)
-			var calc = calcLines(this.value)
-			localStorage.setItem("result", JSON.stringify(calc))
-
-			updateResult(calc)
-			highlightCurrentLine()
-		})
-
-		function highlightCurrentLine() {
-			// TODO: implement
-		}
-
-		function clear() {
-			localStorage.setItem('input', '')
-			localStorage.setItem('result', '')
-			updateResult({'result': [], 'total': 0.0})
-		}
+		});
+		React.renderComponent(<App/>, document.getElementById('app'));
 	</script>
 </body>
 </html>
