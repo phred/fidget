@@ -128,7 +128,7 @@ function calcLines(str) {
           return ans;
         }
       }
-      return "";// || "no";//JSON.stringify(result)
+      return (result && result.length == 0 ? '' : JSON.stringify(result));
     }
     catch (err) {
       console.log(err.stack)
