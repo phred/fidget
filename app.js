@@ -33,7 +33,8 @@ function parseWord(word, parser, tokens, state) {
     tokens.push(parseFloat(word))
   }
   else if (state.immediate[word]) {
-    state.immediate[word].call(null, parser, state)
+    var stk = state.immediate[word].call(null, parser, state, tokens)
+    if (stk) { tokens.push(stk) }
   }
   else if (state[word]) {
     tokens.push(state[word])
@@ -56,6 +57,14 @@ function initState() {
       return [op(stk[0], stk[1])].concat(stk.slice(2))
     }
   }
+  var parseUntil = function (endTok, parser, state, cb) {
+    var tokens = [];
+    while (parser.hasTokens() && parser.curToken() !== endTok) {
+      parseWord(parser.nextToken(), parser, tokens, state)
+    } // TODO: check for end of input & err
+    return tokens;
+  }
+
   return {
     "+": binary(function (a,b) {return a+b}),
     "-": binary(function (a,b) {return a-b}),
@@ -86,29 +95,20 @@ function initState() {
       },
       ":": function (parser, state) {
         var name = parser.nextToken()
-        var tokens = []
-
-        while (parser.hasTokens() && parser.curToken() !== ';') {
-          parseWord(parser.nextToken(), parser, tokens, state)
-        }
-
+        var tokens = tokens = parseUntil(';', parser, state);
         state[name] = function (stk) { return evaluate(tokens, stk) }
       },
       "loop": function (parser, state) {
-        var tokens = []
-        while (parser.hasTokens() && parser.curToken() !== 'end') {
-          parseWord(parser.nextToken(), parser, tokens, state)
+        var tokens = parseUntil('end', parser, state);
+        return function (stk) {
+            var end = stk.shift(), ndx = stk.shift()
+            while (ndx < end) {
+              stk = evaluate(tokens, stk)	// TODO: close over loop var, make available as 'i', or hmm… put ndx on retain stack and make 'i' a general word?
+              ndx++
+            }
+            return stk
         }
-        tokens.push(function (stk) {
-          var ndx = stk[0], end = stk[1]
-          while (ndx < end) {
-            stk = evaluate(tokens, stk)	// TODO: close over loop var, make available as 'i', or hmm… put ndx on retain stack and make 'i' a general word?
-            ndx++
-          }
-          return stk
-        })
       }
-
     },
     cells: {}
   }
