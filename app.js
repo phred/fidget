@@ -85,7 +85,7 @@ function initState() {
         state.cells.__defineGetter__(varName, function () { return cell })
         return varName
       },
-      "let$": function (parser, state) {
+      let$: function (parser, state) {
         while (parser.hasTokens()) {
           var name = state.immediate.let(parser, state)
 
@@ -134,10 +134,10 @@ function calcLines(str) {
         var ans = result[0]
         if (typeof(ans) == "number") {
           total += ans
-          return ans;
+          return ans
         }
       }
-      return (result && result.length == 0 ? '' : JSON.stringify(result));
+      return (result && result.length == 0 ? '' : JSON.stringify(result))
     }
     catch (err) {
       console.log(err.stack)
