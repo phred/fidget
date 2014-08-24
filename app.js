@@ -9,7 +9,7 @@ function map(func) {
 function Parser(line) {
   return {
     ndx: 0,
-    tokens: line.split(" "),
+    tokens: line.split(/ +/).filter(function (t) { return t != ""; }),
     curToken: function () { return this.tokens[this.ndx] },
     nextToken: function () { return this.tokens[this.ndx++] },
     hasTokens: function () { return this.ndx < this.tokens.length }
@@ -18,7 +18,7 @@ function Parser(line) {
 
 function evaluate(tokens, stk) {
   tokens.map(function (tok) {
-    if (typeof(tok) === "number") {
+    if (typeof(tok) === "number" || typeof(tok) === "string") {
       stk = [tok].concat(stk)
     }
     else if (typeof(tok) === "function") {
@@ -39,7 +39,11 @@ function parseWord(word, parser, tokens, state) {
   else if (state[word]) {
     tokens.push(state[word])
   }
+  else {
+    tokens.push(word)
+  }
 }
+
 function parseAndEval(line, state) {
   var parser = new Parser(line)
   var tokens = []
@@ -58,20 +62,21 @@ function initState() {
     }
   }
   var parseUntil = function (endTok, parser, state, cb) {
-    var tokens = [];
+    var tokens = []
     while (parser.hasTokens() && parser.curToken() !== endTok) {
       parseWord(parser.nextToken(), parser, tokens, state)
     } // TODO: check for end of input & err
-    return tokens;
+    parser.nextToken()  // throw away the end token
+    return tokens
   }
 
   return {
-    "+": binary(function (a,b) {return a+b}),
-    "-": binary(function (a,b) {return a-b}),
-    "*": binary(function (a,b) {return a*b}),
-    "/": binary(function (a,b) {return a/b}),
-    "immediate": {
-      "let": function (parser, state) {
+    "+": binary(function (a,b) {return b+a}),
+    "-": binary(function (a,b) {return b-a}),
+    "*": binary(function (a,b) {return b*a}),
+    "/": binary(function (a,b) {return b/a}),
+    immediate: {
+      let: function (parser, state) {
         var varName = parser.nextToken()
         var cell = 0.0
 
