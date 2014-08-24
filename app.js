@@ -100,11 +100,11 @@ function initState() {
       },
       ":": function (parser, state) {
         var name = parser.nextToken()
-        var tokens = tokens = parseUntil(';', parser, state);
+        var tokens = tokens = parseUntil(';', parser, state)
         state[name] = function (stk) { return evaluate(tokens, stk) }
       },
-      "loop": function (parser, state) {
-        var tokens = parseUntil('end', parser, state);
+      loop: function (parser, state) {
+        var tokens = parseUntil('end', parser, state)
         return function (stk) {
             var end = stk.shift(), ndx = stk.shift()
             while (ndx < end) {
@@ -113,11 +113,15 @@ function initState() {
             }
             return stk
         }
-      }
+      },
+     "BUF:": function (parser, state) {
+	 state.bufname = parser.nextToken()
+     }
     },
     cells: {}
   }
 }
+
 function calcLines(str) {
   var lines = (str == "" && [] || str.split('\n'))
   var total = 0
@@ -140,5 +144,5 @@ function calcLines(str) {
       return "#err"
     }
   })
-  return {'result': result, 'total': total, 'cells': state.cells}
+  return {'result': result, 'total': total, 'cells': state.cells, 'bufname': state.bufname}
 }

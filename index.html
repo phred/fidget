@@ -79,18 +79,18 @@
 					cells: calc.cells,
 					sum: calc.total,
 					lineNum: localStorage.getItem("currentLine") || 1,
-					bufname: "untitled",
+					bufname: calc.bufname || "untitled",
 				}
 			},
 			interpretAndRun: function (program) {
 				var calc = calcLines(program);
 				localStorage.setItem("entry", program);
 				localStorage.setItem("result", JSON.stringify(calc));
-
 				this.setState({programInput: program,
 					outputLines: calc.result,
-				  cells: calc.cells,
+					cells: calc.cells,
 					sum: calc.total,
+					bufname: calc.bufname
 				});
 			},
 			updateLine: function (lineNum) {
@@ -99,8 +99,8 @@
 			},
 			render: function () {
 				return (<div className="program">
-					<div className="col">
-						<h2>{this.state.bufname}</h2>
+					  <h2>{this.state.bufname}</h2>
+					  <div className="col">
 						<ProgramInput input={this.state.programInput} onUserInput={this.interpretAndRun} onLineChange={this.updateLine} />
 					</div>
 					<div className="col">
