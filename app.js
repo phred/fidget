@@ -1,3 +1,91 @@
+// how to handle compilation
+// quotation -> write 'execution token', call to anonymous compiled function, could be inlined (function {})()
+//
+// inferring arity is going to be a bitch, factor does it by requiring
+// side-effects for everything and using a type inference / type
+// calculus system. Though with the simplicity of the type
+// system... hmm... it's actually not bad to figure out.
+//
+// If the side effects are ( a b c -- d ) ( a -- c c ) then the side effect is:
+// ( -3 -- +1 ) ( -1 -- +2 ) -> (-3 -- ) (+1 + -1) ( -- +2 ) -> ( -3 -- +2 )
+//
+// ( a b -- c ) ( d e -- f ) -> (should be ( a b c d -- e f )
+// ( -2 -- +1 ) ( -2 -- +1 )
+// ( -4 -- +2 )
+//
+// huh so could really treat them like complex numbers, 2-element
+// vectors, 'cause that's how they add up. And the trick is making
+// sure that the final product matches the declared product, plus
+// adding tricks for those n* words (ndrop, ndup) which are
+// compile-time macros, type-checked just like everything else.
+//
+//
+// idk, compilation could be hard
+//
+// words should be able to be redefined in each vocab as in forth,
+// words can be multiply defined and when compiled they reference the
+// previous implementations. forth does this by an append-only
+// dictionary whose header includes a ref to the previous
+// definition. Forth also uses the dictionary for storage cells.
+//
+// Compiling then does a linear traverse of the dictionary linked list
+// to find the previous definition and then either encodes a call to
+// the previous word or inlines it (for inline words).
+//
+// OK, so what would the compiler look like?
+//
+// Just read through an intro to Scheme's implementation of
+// continuations -- call-with-current-continuation. They said to
+// visualize program execution as a tree of instructions and
+// continuations as pointers to different points in the execution
+// tree. When you do a call/cc it "reifies" the current execution
+// point as a callable function passed as an argument to the first
+// parameter of call/cc. Calling the reified continuation (sometimes
+// called "reflecting" the continuation) returns execution to the
+// caller of call/cc.
+//
+// Factor says that a continuation is T{ data call retain name catch }
+// The way I'm interpreting now uses JS's stack as the callstack, for
+// better or worse. I have a data stack, no retain stack, one global
+// namespace (the thing called 'state' below), no catch stack (JS
+// exceptions blow the stack and interpretation). Probably don't need
+// all of those pieces to make this a compile-to-JS
+// language. Callstack will have to be re-ifiable to properly
+// implement continuations, though. Yeah, and then at that point it
+// *can't* run as pure JS -- no continuations in the language, so it
+// has to be faked by implementation.
+//
+// Factor's compilation-units & vocabulary namespace are rather
+// elegant, it actually can tell when the word asked for is ambiguous.
+//
+// I wonder how forth handles its multiple pages of definitions? Does
+// it replace the previous definitions in-place when you compile?
+// Nope, it appears to always append definitions. They must be
+// FORGET'd to be removed from the dictionary. I think that results in
+// memory holes, since it'd be expensive to rebuild the list. The fact
+// that existing words that rely on the old behaviour continue to
+// work is actually quite nice.
+//
+// In a way the memory fragmentation doesn't matter, bootstrapping the
+// program is done by loading code block by block. Just need to make
+// sure that block loading is done in order of definitions, and it
+// probably can't include circular definitions (though I don't know
+// why you'd them. Recursion works fine)
+//
+// Append-only definitions make sense, and with the GC in Javascript
+// memory fragmentation shouldn't be an issue. Well, also, it's going
+// to be running at N levels of abstraction in a browser's script
+// engine on a modern CPU, so worrying about memory fragmentation is a
+// silly detail. Although using a fixed-sized memory segment
+// (i.e. array) would be very interesting. Forth grows stack
+// downwards, yes? I guess it doesn't matter, it's an implementation detail.
+//
+// word definition -> takes implied execution state (stack, namespaces, retain?) and returns modified execution state
+//                 -> should be able to be generated & eval'd
+//
+// word properties are probably a good idea
+// 
+
 function map(func) {
   var result = []
   for (var ndx in this) {
@@ -16,32 +104,33 @@ function Parser(line) {
   }
 }
 
-function evaluate(tokens, stk) {
+function evaluate(tokens, state) {
   tokens.map(function (tok) {
     if (typeof(tok) === "number" || typeof(tok) === "string") {
-      stk = [tok].concat(stk)
+      state = state.change('stk', function (stk) { return stk.unshift(tok) })
     }
     else if (typeof(tok) === "function") {
-      stk = tok.call(null, stk)
+      state = tok.call(null, state)
     }
   })
-  return stk
+  return state
 }
 
 function parseWord(word, parser, tokens, state) {
   if (word.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
     tokens.push(parseFloat(word))
   }
-  else if (state.immediate[word]) {
-    var stk = state.immediate[word].call(null, parser, state, tokens)
-    if (stk) { tokens.push(stk) }
+  else if (state.get('immediate')[word]) {
+	  state = state.get('immediate')[word].call(null, parser, state, tokens)
+			//    if (stk) { tokens.push(stk) }
   }
-  else if (state[word]) {
-    tokens.push(state[word])
+  else if (state.get(word)) {
+  	tokens.push(state.get(word))
   }
   else {
     tokens.push(word)
   }
+  return {parser: parser, tokens: tokens, state: state}
 }
 
 function parseAndEval(line, state) {
@@ -49,19 +138,35 @@ function parseAndEval(line, state) {
   var tokens = []
 
   while (parser.hasTokens()) {
-    parseWord(parser.nextToken(), parser, tokens, state)
+    result = parseWord(parser.nextToken(), parser, tokens, state)
+		state = result.state
   }
 
-  return evaluate(tokens, [])
+  return evaluate(tokens, state)
+}
+
+Immutable.Map.prototype.change = function (key, mutator) {
+		return this.set(key, mutator(this.get(key)))
+}
+
+Immutable.Map.prototype.first = function (key) {
+		return this.get('stk').get(0)
+}
+
+Immutable.Map.prototype.second = function (key) {
+		return this.get('stk').get(1)
 }
 
 function initState() {
-  var binary = function (op) {
-    return function (stk) {
-      return [op(stk[0], stk[1])].concat(stk.slice(2))
+  var binary = function (op) { // ( a b -- c )
+    return function (s) {
+      return s.change('stk', function (stk) {
+					stk = stk.skip(2).toVector()
+					return stk.unshift(op(s.first(), s.second()))
+			})
     }
   }
-  var parseUntil = function (endTok, parser, state, cb) {
+  var parseUntil = function (endTok, parser, state) {
     var tokens = []
     while (parser.hasTokens() && parser.curToken() !== endTok) {
       parseWord(parser.nextToken(), parser, tokens, state)
@@ -69,57 +174,56 @@ function initState() {
     parser.nextToken()  // throw away the end token
     return tokens
   }
-
-  return {
-    "+": binary(function (a,b) {return b+a}),
+// SO REALLY these need to be f(state) -> (state')
+  return Immutable.Map({
+		"stk": Immutable.Vector(), // the datastack
+		"ns": Immutable.Map(), // the root namespace
+    "+": binary(function (a,b) {return b+a}), // these belong at the bottom of the namestack
     "-": binary(function (a,b) {return b-a}),
     "*": binary(function (a,b) {return b*a}),
     "/": binary(function (a,b) {return b/a}),
+		"dup": function (s) {
+				return s.change('stk', function (stk) { return stk.unshift(s.first()) })
+		},
     immediate: {
-      let: function (parser, state) {
+      let: function (parser, state) { // TODO, these should modify namespace and return changed state
         var varName = parser.nextToken()
-        var cell = 0.0
 
-        state[varName] = function (stk) { return [cell].concat(stk) }
-        state['#' + varName] = function (stk) { cell += stk[0]; return stk }
-        state.cells.__defineGetter__(varName, function () { return cell })
-        return varName
-      },
-      let$: function (parser, state) {
-        while (parser.hasTokens()) {
-          var name = state.immediate.let(parser, state)
-
-          var cls = function (varName) {
-            var goal = parser.nextToken()
-
-            var getter = state.cells.__lookupGetter__(varName)
-            state.cells.__defineGetter__(varName, function () { return {'val': getter(), 'goal': goal, 'toString': function () { return this.val + '/' + this.goal } } })
-          }
-          cls(name)
-        }
+				state = state.change('ns', function (ns) { return ns.set(varName, 0.0) })
+        state = state.set(varName, function (s) { return s.set('stk', [state.ns.get(varName)].concat(s.stk)) })
+        state = state.set('>' + varName, function (s) {
+						var first = s.first()
+						s = change('ns', function (oldVal) { return oldVal.set(varName, first) })
+						s = change('stk', function (oldVal) { return oldVal.shift() })
+						return s
+				})
+				return state
       },
       ":": function (parser, state) {
         var name = parser.nextToken()
         var tokens = tokens = parseUntil(';', parser, state)
-        state[name] = function (stk) { return evaluate(tokens, stk) }
+        return state.set(name, function (stk) { return evaluate(tokens, stk) })
       },
       loop: function (parser, state) {
         var tokens = parseUntil('end', parser, state)
+return state  // TODO: implement this in the new style
         return function (stk) {
             var end = stk.shift(), ndx = stk.shift()
             while (ndx < end) {
-              stk = evaluate(tokens, stk)	// TODO: close over loop var, make available as 'i', or hmm… put ndx on retain stack and make 'i' a general word?
+              stk = evaluate(tokens, stk)	
+						// TODO: close over loop var, make available as 'i', or
+						// hmm… put ndx on retain stack and make 'i' a general
+						// word?
               ndx++
             }
             return stk
         }
       },
-     "BUF:": function (parser, state) {
-	 state.bufname = parser.nextToken()
+     "IN:": function (parser, state) {
+       return state.set('bufname', parser.nextToken())
      }
-    },
-    cells: {}
-  }
+    }
+  });
 }
 
 function calcLines(str) {
@@ -129,20 +233,45 @@ function calcLines(str) {
 
   var result = lines.map(function (line) {
     try {
-      var result = parseAndEval(line, state)
-      if (result.length == 1) {
-        var ans = result[0]
-        if (typeof(ans) == "number") {
+      state = parseAndEval(line, state)
+			var value = state.get('stk').toJS()
+			state = state.set('stk', Immutable.Vector())
+
+      if (value !== undefined && value.length == 1) {
+        var ans = value[0]
+				if (Number.isNaN(ans)) {
+					return ans.toString()
+  			}
+        else if (typeof(ans) == "number") {
           total += ans
           return ans
         }
       }
-      return (result && result.length == 0 ? '' : JSON.stringify(result))
+      return (value && value.length == 0 ? '' : JSON.stringify(value))
     }
     catch (err) {
       console.log(err.stack)
       return "#err"
     }
   })
+
+  state = state.toJS()
   return {'result': result, 'total': total, 'cells': state.cells, 'bufname': state.bufname}
 }
+
+
+// belongs in a 'budget' vocab
+//       let$: function (parser, state) {
+//         while (parser.hasTokens()) {
+//           var name = state.immediate.let(parser, state) // TODO: fix, this is busted
+// 
+//           var cls = function (varName) {
+//             var goal = parser.nextToken()
+// 
+//             var getter = state.cells.__lookupGetter__(varName)
+//             state.cells.__defineGetter__(varName, function () { return {'val': getter(), 'goal': goal, 'toString': function () { return this.val + '/' + this.goal } } })
+//           }
+//           cls(name)
+//         }
+// 	  return state
+//       },

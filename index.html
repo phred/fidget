@@ -7,6 +7,7 @@
 	<link rel="stylesheet" href="app.css" media="screen" charset="utf-8">
 	<script src="react-0.10.0/build/JSXTransformer.js"></script>
 	<script src="react-0.10.0/build/react.js"></script>
+	<script src="Immutable.min.js"></script>
 </head>
 <body>
 	<div id="app">
@@ -79,7 +80,7 @@
 					cells: calc.cells,
 					sum: calc.total,
 					lineNum: localStorage.getItem("currentLine") || 1,
-					bufname: calc.bufname || "untitled",
+					bufname: calc.bufname,
 				}
 			},
 			interpretAndRun: function (program) {
@@ -99,7 +100,7 @@
 			},
 			render: function () {
 				return (<div className="program">
-					  <h2>{this.state.bufname}</h2>
+					  <h2>{this.state.bufname || "untitled"}</h2>
 					  <div className="col">
 						<ProgramInput input={this.state.programInput} onUserInput={this.interpretAndRun} onLineChange={this.updateLine} />
 					</div>
