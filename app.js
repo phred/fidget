@@ -84,7 +84,7 @@
 //                 -> should be able to be generated & eval'd
 //
 // word properties are probably a good idea
-// 
+//
 
 function map(func) {
   var result = []
@@ -121,11 +121,11 @@ function parseWord(word, parser, tokens, state) {
     tokens.push(parseFloat(word))
   }
   else if (state.get('immediate')[word]) {
-	  state = state.get('immediate')[word].call(null, parser, state, tokens)
-			//    if (stk) { tokens.push(stk) }
+      state = state.get('immediate')[word].call(null, parser, state, tokens)
+      //    if (stk) { tokens.push(stk) }
   }
   else if (state.get(word)) {
-  	tokens.push(state.get(word))
+    tokens.push(state.get(word))
   }
   else {
     tokens.push(word)
@@ -139,31 +139,31 @@ function parseAndEval(line, state) {
 
   while (parser.hasTokens()) {
     result = parseWord(parser.nextToken(), parser, tokens, state)
-		state = result.state
+    state = result.state
   }
 
   return evaluate(tokens, state)
 }
 
 Immutable.Map.prototype.change = function (key, mutator) {
-		return this.set(key, mutator(this.get(key)))
+    return this.set(key, mutator(this.get(key)))
 }
 
 Immutable.Map.prototype.first = function (key) {
-		return this.get('stk').get(0)
+    return this.get('stk').get(0)
 }
 
 Immutable.Map.prototype.second = function (key) {
-		return this.get('stk').get(1)
+    return this.get('stk').get(1)
 }
 
 function initState() {
   var binary = function (op) { // ( a b -- c )
     return function (s) {
       return s.change('stk', function (stk) {
-					stk = stk.skip(2).toVector()
-					return stk.unshift(op(s.first(), s.second()))
-			})
+          stk = stk.skip(2).toVector()
+          return stk.unshift(op(s.first(), s.second()))
+      })
     }
   }
   var parseUntil = function (endTok, parser, state) {
@@ -176,48 +176,48 @@ function initState() {
   }
 // SO REALLY these need to be f(state) -> (state')
   return Immutable.Map({
-		"stk": Immutable.Vector(), // the datastack
-		"ns": Immutable.Map(), // the root namespace
-    "+": binary(function (a,b) {return b+a}), // these belong at the bottom of the namestack
-    "-": binary(function (a,b) {return b-a}),
-    "*": binary(function (a,b) {return b*a}),
-    "/": binary(function (a,b) {return b/a}),
-		"dup": function (s) {
-				return s.change('stk', function (stk) { return stk.unshift(s.first()) })
-		},
-    immediate: {
-      let: function (parser, state) { // TODO, these should modify namespace and return changed state
-        var varName = parser.nextToken()
-
-				state = state.change('ns', function (ns) { return ns.set(varName, 0.0) })
-        state = state.set(varName, function (s) { return s.set('stk', [state.ns.get(varName)].concat(s.stk)) })
-        state = state.set('>' + varName, function (s) {
-						var first = s.first()
-						s = change('ns', function (oldVal) { return oldVal.set(varName, first) })
-						s = change('stk', function (oldVal) { return oldVal.shift() })
-						return s
-				})
-				return state
+      "stk": Immutable.Vector(), // the datastack
+      "ns": Immutable.Map(), // the root namespace
+      "+": binary(function (a,b) {return b+a}), // these belong at the bottom of the namestack
+      "-": binary(function (a,b) {return b-a}),
+      "*": binary(function (a,b) {return b*a}),
+      "/": binary(function (a,b) {return b/a}),
+      "dup": function (s) {
+          return s.change('stk', function (stk) { return stk.unshift(s.first()) })
       },
+      immediate: {
+          let: function (parser, state) { // TODO, these should modify namespace and return changed state
+              var varName = parser.nextToken()
+
+              state = state.change('ns', function (ns) { return ns.set(varName, 0.0) })
+              state = state.set(varName, function (s) { return s.set('stk', [state.ns.get(varName)].concat(s.stk)) })
+              state = state.set('>' + varName, function (s) {
+                  var first = s.first()
+                  s = change('ns', function (oldVal) { return oldVal.set(varName, first) })
+                  s = change('stk', function (oldVal) { return oldVal.shift() })
+                  return s
+              })
+              return state
+          },
       ":": function (parser, state) {
-        var name = parser.nextToken()
-        var tokens = tokens = parseUntil(';', parser, state)
-        return state.set(name, function (stk) { return evaluate(tokens, stk) })
+    var name = parser.nextToken()
+    var tokens = tokens = parseUntil(';', parser, state)
+    return state.set(name, function (stk) { return evaluate(tokens, stk) })
       },
       loop: function (parser, state) {
-        var tokens = parseUntil('end', parser, state)
+    var tokens = parseUntil('end', parser, state)
 return state  // TODO: implement this in the new style
-        return function (stk) {
-            var end = stk.shift(), ndx = stk.shift()
-            while (ndx < end) {
-              stk = evaluate(tokens, stk)	
-						// TODO: close over loop var, make available as 'i', or
-						// hmm… put ndx on retain stack and make 'i' a general
-						// word?
-              ndx++
-            }
-            return stk
+    return function (stk) {
+        var end = stk.shift(), ndx = stk.shift()
+        while (ndx < end) {
+          stk = evaluate(tokens, stk)
+                        // TODO: close over loop var, make available as 'i', or
+                        // hmm… put ndx on retain stack and make 'i' a general
+                        // word?
+          ndx++
         }
+        return stk
+    }
       },
      "IN:": function (parser, state) {
        return state.set('bufname', parser.nextToken())
@@ -234,29 +234,30 @@ function calcLines(str) {
   var result = lines.map(function (line) {
     try {
       state = parseAndEval(line, state)
-			var value = state.get('stk').toJS()
-			state = state.set('stk', Immutable.Vector())
+            var value = state.get('stk').toJS()
+            state = state.set('stk', Immutable.Vector())
 
       if (value !== undefined && value.length == 1) {
-        var ans = value[0]
-				if (Number.isNaN(ans)) {
-					return ans.toString()
-  			}
-        else if (typeof(ans) == "number") {
-          total += ans
-          return ans
-        }
+    var ans = value[0]
+                if (isNaN(ans)) {
+                    return ans.toString()
+            }
+    else if (typeof(ans) == "number") {
+      total += ans
+      return ans
+    }
       }
       return (value && value.length == 0 ? '' : JSON.stringify(value))
     }
     catch (err) {
-      console.log(err.stack)
+            console.log(err)
+//      console.log(err.stack)
       return "#err"
     }
   })
 
   state = state.toJS()
-  return {'result': result, 'total': total, 'cells': state.cells, 'bufname': state.bufname}
+  return {'result': result, 'total': total, 'cells': {}, 'bufname': state.bufname}
 }
 
 
@@ -264,14 +265,14 @@ function calcLines(str) {
 //       let$: function (parser, state) {
 //         while (parser.hasTokens()) {
 //           var name = state.immediate.let(parser, state) // TODO: fix, this is busted
-// 
+//
 //           var cls = function (varName) {
 //             var goal = parser.nextToken()
-// 
+//
 //             var getter = state.cells.__lookupGetter__(varName)
 //             state.cells.__defineGetter__(varName, function () { return {'val': getter(), 'goal': goal, 'toString': function () { return this.val + '/' + this.goal } } })
 //           }
 //           cls(name)
 //         }
-// 	  return state
+//    return state
 //       },
