@@ -50,7 +50,7 @@
 				var highlight = this.props.highlight;
 				var rows = [], ndx = 0, nbsp = "\u000f";
 				return <div id="result">{this.props.text.map(function (el) {
-					return <span key={ndx++} className={ndx == highlight ? "hl" : null}>{el || nbsp}</span>;
+					return <span key={ndx++} className={ndx == highlight ? "hl" : null}>{el === "" && nbsp || el}</span>;
 				})}</div>;
 			}
 		});
