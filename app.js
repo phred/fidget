@@ -120,17 +120,24 @@ function parseWord(word, parser, tokens, state) {
   if (word.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
     tokens.push(parseFloat(word))
   }
-  else if (state.get('immediate')[word]) {
-      state = state.get('immediate')[word].call(null, parser, state, tokens)
-      //    if (stk) { tokens.push(stk) }
+  else if (nsLookup(state, word) && nsLookup(state, word).immediate) {
+      state = nsLookup(state, word).call(null, parser, state, tokens)
   }
-  else if (state.get(word)) {
-    tokens.push(state.get(word))
+  else if (nsLookup(state, word)) {
+    tokens.push(nsLookup(state, word))
   }
   else {
-    tokens.push(word)
+    tokens.push(word) // Unknown words? -> string
   }
   return {parser: parser, tokens: tokens, state: state}
+}
+
+function nsLookup(state, word) {
+  for (ns = state.get('ns'); ns != null; ns = ns.get('_parent')) {
+    if (ns.get(word) !== null) {
+      return ns.get(word);
+    }
+  }
 }
 
 function parseAndEval(line, state) {
@@ -174,55 +181,86 @@ function initState() {
     parser.nextToken()  // throw away the end token
     return tokens
   }
+  var immediate = function(word) {
+    word.immediate = true;
+    return word;
+  }
+
 // SO REALLY these need to be f(state) -> (state')
   return Immutable.Map({
-      "stk": Immutable.Vector(), // the datastack
-      "ns": Immutable.Map(), // the root namespace
+    "stk": Immutable.Vector(), // the datastack
+    "ns": Immutable.Map({
       "+": binary(function (a,b) {return b+a}), // these belong at the bottom of the namestack
       "-": binary(function (a,b) {return b-a}),
       "*": binary(function (a,b) {return b*a}),
       "/": binary(function (a,b) {return b/a}),
-      "dup": function (s) {
-          return s.change('stk', function (stk) { return stk.unshift(s.first()) })
+      dup: function (state) {
+        return state.change('stk', function (stk) { return stk.unshift(state.first()) })
       },
-      immediate: {
-          let: function (parser, state) { // TODO, these should modify namespace and return changed state
-              var varName = parser.nextToken()
+      swap: function (state) {
+        return state.change('stk', function (stk) {
+          return stk.skip(2).toVector().unshift(state.first()).unshift(state.second())
+        })
+      },
+      cells: Immutable.Map(),
+      let: immediate(function (parser, state) { // TODO, these should modify namespace and return changed state
+          var varName = parser.nextToken()
 
-              state = state.change('ns', function (ns) { return ns.set(varName, 0.0) })
-              state = state.set(varName, function (s) { return s.set('stk', [state.ns.get(varName)].concat(s.stk)) })
-              state = state.set('>' + varName, function (s) {
-                  var first = s.first()
-                  s = change('ns', function (oldVal) { return oldVal.set(varName, first) })
-                  s = change('stk', function (oldVal) { return oldVal.shift() })
-                  return s
+          return state.change('ns', function (ns) {
+            var cell = varName + '_cell';
+
+            ns = ns.set(cell, 0.0);
+            ns = ns.change('cells', function (cells) {
+              return cells.set(varName, cell);
+            });
+            ns = ns.set(varName, function (state) {
+              return state.change('stk', function (stk) {
+                return stk.unshift(nsLookup(state, cell))
               })
-              return state
-          },
-      ":": function (parser, state) {
-    var name = parser.nextToken()
-    var tokens = tokens = parseUntil(';', parser, state)
-    return state.set(name, function (stk) { return evaluate(tokens, stk) })
-      },
-      loop: function (parser, state) {
-    var tokens = parseUntil('end', parser, state)
-return state  // TODO: implement this in the new style
-    return function (stk) {
-        var end = stk.shift(), ndx = stk.shift()
-        while (ndx < end) {
-          stk = evaluate(tokens, stk)
-                        // TODO: close over loop var, make available as 'i', or
-                        // hmm… put ndx on retain stack and make 'i' a general
-                        // word?
-          ndx++
-        }
-        return stk
-    }
-      },
-     "IN:": function (parser, state) {
-       return state.set('bufname', parser.nextToken())
-     }
-    }
+            })
+            return ns.set('#' + varName, function (state) {
+                var first = state.first()
+                state = state.change('ns', function (ns) {
+                  return ns.set(cell, nsLookup(state, cell) + first)
+                })
+                return state.change('stk', function (stk) {
+                  return stk.skip(1).toVector()
+                });
+            })
+          })
+      }),
+      ":": immediate(function (parser, state) {
+        var name = parser.nextToken()
+        var tokens = tokens = parseUntil(';', parser, state)
+        return state.change('ns', function (ns) {
+          return ns.set(name, function (stk) {
+            return evaluate(tokens, stk)
+          })
+        });
+      }),
+      loop: immediate(function (parser, state, tokens) {
+        var loopBody = parseUntil('end', parser, state)
+
+        tokens.push(function (state) {
+            var end = state.first(), ndx = state.second()
+
+            state = state.change('stk', function (stk) {  // Consume vars from stack
+              stk = stk.skip(2).toVector()
+              return stk;
+            });
+            while (ndx < end) {
+              state = state.set('i', function () { return ndx });
+              state = evaluate(loopBody, state)
+              ndx++
+            }
+            return state
+        })
+        return state
+      }),
+       "IN:": immediate(function (parser, state) {
+         return state.set('bufname', parser.nextToken())
+       })
+    })
   });
 }
 
@@ -250,14 +288,20 @@ function calcLines(str) {
       return (value && value.length == 0 ? '' : JSON.stringify(value))
     }
     catch (err) {
-            console.log(err)
-//      console.log(err.stack)
+      console.log(err, "While evaluating '" + line + "'")
       return "#err"
     }
   })
 
   state = state.toJS()
-  return {'result': result, 'total': total, 'cells': {}, 'bufname': state.bufname}
+  return {
+      result: result,
+      total: total,
+      cells: ns.get('cells').map(function (cell) {
+              return ns.get(cell)
+            }).toJS(),
+      bufname: state.bufname
+    }
 }
 
 
