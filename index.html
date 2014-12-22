@@ -1,119 +1,125 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<meta charset="utf-8">
-	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>Fidget</title>
-	<link rel="stylesheet" href="app.css" media="screen" charset="utf-8">
-	<script src="react-0.10.0/build/JSXTransformer.js"></script>
-	<script src="react-0.10.0/build/react.js"></script>
-	<script src="Immutable.min.js"></script>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Fidget</title>
+    <link rel="stylesheet" href="app.css" media="screen" charset="utf-8">
+    <script src="react-0.10.0/build/JSXTransformer.js"></script>
+    <script src="react-0.10.0/build/react.js"></script>
+    <script src="Immutable.min.js"></script>
 </head>
 <body>
-	<div id="app">
-	</div>
+    <div id="app">
+    </div>
   <script type="text/javascript" src="app.js"></script>
-	<script type="text/jsx">
+    <script type="text/jsx">
     /** @jsx React.DOM */
 
-		var getCurrentLine = function (node) {
-			var lineNumber = 0;
+        var getCurrentLine = function (node) {
+            var lineNum = node.value.substr(0, node.selectionStart).split("\n").length - 1;
+            return 1 + lineNum;
+        }
 
-			lineNum = node.value.substr(0,node.selectionStart).split("\n").length - 1;
-			content = node.value.split("\n")[lineNumber];
+        var ProgramInput = React.createClass({
+            notifyLineChange: function () {
+                var textbox = this.refs.textbox.getDOMNode();
+                this.props.onLineChange(getCurrentLine(textbox));
+            },
+            handleChange: function () {
+                var textbox = this.refs.textbox.getDOMNode();
+                this.props.onUserInput(textbox.value);
+                this.notifyLineChange();
+            },
+            updateLine: function () {
+                this.notifyLineChange();
+            },
+            render: function () {
+                var ndx = 0;
+                return (
+                    <textarea className="programInput"
+                              ref="textbox"
+                              onChange={this.handleChange}
+                              onKeyUp={this.updateLine}
+                              onClick={this.updateLine}
+                              value={this.props.input} />);
+            }
+        });
+        var OutputLines = React.createClass({
+            render: function () {
+                var highlight = this.props.highlight;
+                var rows = [], ndx = 0, nbsp = "\u000f";
+                return <div id="result">{
+                    this.props.text.map(function (el) {
+                    return (
+                        <span key={ndx++} className={ndx == highlight ? "hl" : null}>
+                            {el === "" && nbsp || el}
+                        </span>);
+                })}</div>;
+            }
+        });
+        var Sum = React.createClass({
+            render: function () {
+                return <div className="sum">Sum: {this.props.value}</div>;
+            }
+        });
+        var Cells = React.createClass({
+            render: function () {
+                var cells = this.props.cells;
+                return (
+                    <div className="cells">{
+                        Object.keys(cells).map(function (key) {
+                            return <span key={key} className="cell">{key}: {cells[key].toString()}</span>;
+                        })
+                    }</div>);
+            }
+        });
 
-			return 1 + lineNum;
-		}
-
-		var ProgramInput = React.createClass({
-			notifyLineChange: function () {
-				var textbox = this.refs.textbox.getDOMNode();
-				this.props.onLineChange(getCurrentLine(textbox));
-			},
-			handleChange: function () {
-				var textbox = this.refs.textbox.getDOMNode();
-				this.props.onUserInput(textbox.value);
-				this.notifyLineChange();
-			},
-			updateLine: function () {
-				this.notifyLineChange();
-			},
-			render: function () {
-				var ndx = 0;
-				return (
-					<textarea className="programInput" ref="textbox" onChange={this.handleChange} onKeyUp={this.updateLine} onClick={this.updateLine} value={this.props.input} />
-				);
-			}
-		});
-		var OutputLines = React.createClass({
-			render: function () {
-				var highlight = this.props.highlight;
-				var rows = [], ndx = 0, nbsp = "\u000f";
-				return <div id="result">{this.props.text.map(function (el) {
-					return <span key={ndx++} className={ndx == highlight ? "hl" : null}>{el === "" && nbsp || el}</span>;
-				})}</div>;
-			}
-		});
-		var Sum = React.createClass({
-			render: function () {
-				return <div className="sum">Sum: {this.props.value}</div>;
-			}
-		});
-		var Cells = React.createClass({
-			render: function () {
-				var cells = this.props.cells;
-				return <div className="cells">{
-					Object.keys(cells).map(function (key) {
-						return <span key={key} className="cell">{key}: {cells[key]}</span>;
-					})
-				}</div>;
-			}
-		});
-
-		var App = React.createClass({
-			getInitialState: function () {
-				var program = localStorage.getItem("entry");
-				var calc = calcLines(program);
-				return {
-					programInput: program,
-					outputLines: calc.result,
-					cells: calc.cells,
-					sum: calc.total,
-					lineNum: localStorage.getItem("currentLine") || 1,
-					bufname: calc.bufname,
-				}
-			},
-			interpretAndRun: function (program) {
-				var calc = calcLines(program);
-				localStorage.setItem("entry", program);
-				localStorage.setItem("result", JSON.stringify(calc));
-				this.setState({programInput: program,
-					outputLines: calc.result,
-					cells: calc.cells,
-					sum: calc.total,
-					bufname: calc.bufname
-				});
-			},
-			updateLine: function (lineNum) {
-				this.setState({lineNum: lineNum});
-				localStorage.setItem("currentLine", lineNum);
-			},
-			render: function () {
-				return (<div className="program">
-					  <h2>{this.state.bufname || "untitled"}</h2>
-					  <div className="col">
-						<ProgramInput input={this.state.programInput} onUserInput={this.interpretAndRun} onLineChange={this.updateLine} />
-					</div>
-					<div className="col">
-						<OutputLines text={this.state.outputLines} highlight={this.state.lineNum}/>
-						<Sum value={this.state.sum}/>
-						<Cells cells={this.state.cells}/>
-						<span>{this.state.lineNum}</span>
-					</div>
-				</div>);
-			}
-		});
-		React.renderComponent(<App/>, document.getElementById('app'));
-	</script>
+        var App = React.createClass({
+            getInitialState: function () {
+                var program = localStorage.getItem("entry");
+                var calc = calcLines(program);
+                return {
+                    programInput: program,
+                    outputLines: calc.result,
+                    cells: calc.cells,
+                    sum: calc.total,
+                    lineNum: localStorage.getItem("currentLine") || 1,
+                    bufname: calc.bufname,
+                }
+            },
+            interpretAndRun: function (program) {
+                var calc = calcLines(program);
+                localStorage.setItem("entry", program);
+                localStorage.setItem("result", JSON.stringify(calc));
+                this.setState({programInput: program,
+                    outputLines: calc.result,
+                    cells: calc.cells,
+                    sum: calc.total,
+                    bufname: calc.bufname
+                });
+            },
+            updateLine: function (lineNum) {
+                this.setState({lineNum: lineNum});
+                localStorage.setItem("currentLine", lineNum);
+            },
+            render: function () {
+                return (
+                    <div className="program">
+                      <h2>{this.state.bufname || "untitled"}</h2>
+                      <div className="col">
+                        <ProgramInput input={this.state.programInput} onUserInput={this.interpretAndRun} onLineChange={this.updateLine} />
+                      </div>
+                      <div className="col">
+                        <OutputLines text={this.state.outputLines} highlight={this.state.lineNum}/>
+                        <Sum value={this.state.sum}/>
+                        <Cells cells={this.state.cells}/>
+                        <span>{this.state.lineNum}</span>
+                      </div>
+                    </div>);
+            }
+        });
+        React.renderComponent(<App/>, document.getElementById('app'));
+    </script>
 </body>
 </html>
