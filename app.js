@@ -130,10 +130,10 @@ function initState() {
                 return stk.unshift(nsLookup(state, cell))
               })
             })
-            return ns.set('#' + varName, function (state) {
+            return ns.set('>' + varName, function (state) {
                 var first = state.first()
                 state = state.change('ns', function (ns) {
-                  return ns.set(cell, nsLookup(state, cell) + first)
+                  return ns.set(cell, first)
                 })
                 return state.change('stk', function (stk) {
                   return stk.skip(1).toVector()
@@ -205,6 +205,7 @@ function calcLines(str) {
     }
   })
 
+  var ns = state.get('ns')
   state = state.toJS()
   return {
       result: result,
