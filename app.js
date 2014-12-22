@@ -166,10 +166,10 @@ Immutable.Map.prototype.second = function (key) {
 
 function initState() {
   var binary = function (op) { // ( a b -- c )
-    return function (s) {
-      return s.change('stk', function (stk) {
+    return function (state) {
+      return state.change('stk', function (stk) {
           stk = stk.skip(2).toVector()
-          return stk.unshift(op(s.first(), s.second()))
+          return stk.unshift(op(state.first(), state.second()))
       })
     }
   }
@@ -272,18 +272,18 @@ function calcLines(str) {
   var result = lines.map(function (line) {
     try {
       state = parseAndEval(line, state)
-            var value = state.get('stk').toJS()
-            state = state.set('stk', Immutable.Vector())
+      var value = state.get('stk').toJS()
+      state = state.set('stk', Immutable.Vector())
 
       if (value !== undefined && value.length == 1) {
-    var ans = value[0]
-                if (isNaN(ans)) {
-                    return ans.toString()
-            }
-    else if (typeof(ans) == "number") {
-      total += ans
-      return ans
-    }
+        var ans = value[0]
+        if (isNaN(ans)) {
+          return ans.toString()
+        }
+        else if (typeof(ans) == "number") {
+          total += ans
+          return ans
+        }
       }
       return (value && value.length == 0 ? '' : JSON.stringify(value))
     }
