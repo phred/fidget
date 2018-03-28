@@ -2,14 +2,14 @@
 @import url(source-sans/source-sans-pro.css);
 
 body, .programInput, input {
-  font-family: "Source Sans Pro" sans-serif;
+  font-family: "Source Sans Pro", sans-serif;
   font-weight: 300;
   font-size: 24px;
   color: #454545;
   line-height: 34px;
   margin: 0px;
 }
-div.col {
+.col {
   background-color: #8eaeca;
   border: 1px solid #ccc;
   float: left;
@@ -18,16 +18,16 @@ div.col {
   position: relative;
 }
 @media (min-width: 1000px) {
-  div.col {
+  .col {
     width: 48%;
   }
 }
 @media (min-width: 650px) {
-  div.col {
+  .col {
     width: 36%;
   }
 }
-div.col {
+.col {
   /*width: 50%;*/
 }
 .programInput {

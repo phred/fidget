@@ -1,11 +1,3 @@
-function map(func) {
-  var result = []
-  for (var ndx in this) {
-    result.push(func(this[ndx], ndx))
-  }
-  return result
-}
-
 function Parser(line) {
   return {
     ndx: 0,
@@ -114,6 +106,11 @@ function initState() {
           return stk.skip(2).toVector().unshift(state.first()).unshift(state.second())
         })
       },
+      drop: function (state) {
+        return state.change('stk', function (stk) {
+          return stk.skip(1).toVector();
+        });
+      },
       cells: Immutable.Map(),
       let: immediate(function (parser, state) { // TODO, these should modify namespace and return changed state
           var varName = parser.nextToken()
@@ -177,7 +174,7 @@ function initState() {
 }
 
 function calcLines(str) {
-  var lines = (str == "" && [] || str.split('\n'))
+  var lines = (str === "" || !str ? [] : str.split('\n'))
   var total = 0
   var state = initState()
 
