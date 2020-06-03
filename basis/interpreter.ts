@@ -1,6 +1,15 @@
+
+
 interface DictionaryEntry {
   immediate: boolean;
 }
+
+type NotFound = false
+const NotFound : NotFound = false;
+
+
+type DictionaryLookup = DictionaryEntry | NotFound;
+
 
 type State = Map<string, DictionaryEntry>;
 type Tokens = string[];
@@ -29,8 +38,9 @@ function Parser(line: string): Cursor {
   };
 }
 
-function nsLookup(state: State, word: Word): DictionaryEntry | undefined {
-  return state.get(word);
+function nsLookup(state: State, word: Word): DictionaryLookup {
+  const entry = state.get(word);
+  return (typeof entry === "undefined" ? NotFound : entry);
 }
 
 function parseWord(word: Word, parser: Cursor, tokens: Tokens, state: State) {
