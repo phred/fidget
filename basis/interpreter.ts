@@ -1,19 +1,34 @@
 
 
-interface DictionaryEntry {
-  immediate: boolean;
+
+type State = Map<string, DictionaryEntry>;
+
+type Token = string;
+type Tokens = Token[];
+
+interface Word {
+  name: string,
+  impl: any,
+  immediate?: boolean,
 }
+
+type ImmediateCall = (lex: Cursor, c: Continuation) => {lexer: Cursor, continuation: Continuation}
+
+interface ImmediateWord {
+  name: string,
+  impl: ImmediateCall,
+  immediate: true,
+}
+
+type Words = Word[];
+
+
+type DictionaryEntry = Word;
 
 type NotFound = false
 const NotFound : NotFound = false;
 
-
-type DictionaryLookup = DictionaryEntry | NotFound;
-
-
-type State = Map<string, DictionaryEntry>;
-type Tokens = string[];
-type Word = string;
+type DictionaryLookup = Word | NotFound;
 
 interface Cursor {
   ndx: number;
@@ -23,7 +38,7 @@ interface Cursor {
   hasTokens: () => boolean;
 }
 
-function Parser(line: string): Cursor {
+function Lexer(line: string): Cursor {
   const tokens = line.split(/ +/).filter(function (t) {
     return t != "";
   });
@@ -38,28 +53,75 @@ function Parser(line: string): Cursor {
   };
 }
 
-function nsLookup(state: State, word: Word): DictionaryLookup {
+function nsLookup(state: State, word: string): DictionaryLookup {
   const entry = state.get(word);
   return (typeof entry === "undefined" ? NotFound : entry);
 }
 
-function parseWord(word: Word, parser: Cursor, tokens: Tokens, state: State) {
+const Numeric = (token: Token) : Word =>  {
+  return {
+    name: "Numeric",
+    impl: () => parseFloat(token),
+  }
+}
+
+const String = (token: Token) : Word => {
+  return {
+    name: "String",
+    impl: () => token,
+  }
+}
+
+interface ParseStep {
+  continuation: Continuation,
+  parser: Cursor,
+}
+
+function parseWord(word: Token, parser: Cursor, c: Continuation) : ParseStep {
   if (word.match(/^[+-]?\d+(\.\d+)?(e\d+)?$/)) {
-    tokens.push(`${parseFloat(word)}`);
-  } 
+    c.program.push(Numeric(word));
+    return {parser, continuation: c};
+  }
 /*else if (nsLookup(state, word) && nsLookup(state, word).immediate) {
     state = nsLookup(state, word).call(null, parser, state, tokens);
-  } else if (nsLookup(state, word)) {
-    tokens.push(nsLookup(state, word));
-  }*/
-  else {
-    tokens.push(word); // Unknown words? -> string
+  } */
+
+  let w = nsLookup(c.state, word);
+
+  if ((w as Word)) {
+    c.program.push((w as Word));
   }
-  return { parser: parser, tokens: tokens, state: state };
+  else if ((w as ImmediateWord)) {
+    //return (w as ImmediateWord).call(parser, program, state);
+  }
+  else {
+      c.program.push(String(word)); // Unknown words? -> string
+  }
+
+  return { parser, continuation: c };
+}
+
+interface Continuation {
+  state: State,
+  program: Words
+}
+
+function parseLine(line: string, state: State) : Continuation {
+  let parser = Lexer(line)
+  let program : Words = [];
+  let _continuation = {program, state};
+
+  while (parser.hasTokens()) {
+    let {continuation} = parseWord(parser.nextToken(), parser, _continuation)
+    _continuation = continuation
+  }
+
+  return _continuation
 }
 
 export {
-  Parser,
+  Lexer,
+  parseLine,
 };
 
 /*string[]
@@ -84,6 +146,7 @@ function nsLookup(state, word) {
     }
   }
 }
+
 
 function parseAndEval(line, state) {
   var parser = new Parser(line)
